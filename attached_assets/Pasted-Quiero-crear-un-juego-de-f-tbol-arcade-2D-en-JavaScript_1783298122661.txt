@@ -1,0 +1,35 @@
+Quiero crear un juego de fútbol arcade 2D en JavaScript usando Phaser 3, estilo Haxball pero con modo carrera offline (sin multijugador online).
+
+CONCEPTO GENERAL:
+- Cancha de fútbol vista desde arriba (top-down), física simple estilo Haxball (los jugadores empujan la pelota al chocarla, rebotes simples en jugadores/paredes)
+- El jugador controla UN SOLO personaje en la cancha con WASD o flechas
+- Velocidad de movimiento FIJA (sin botón de sprint)
+- Botón de tiro/pase (barra espaciadora o click) con FUERZA FIJA (no varía según cuánto tiempo se mantenga apretado)
+- Los compañeros de equipo y los rivales son controlados por IA básica: se marcan, buscan espacios, pasan la pelota, defienden
+- Partidos cortos (2-4 minutos por mitad)
+
+MODO CARRERA (el corazón del juego):
+- Al iniciar, el usuario crea su jugador: nombre, posición (arquero/defensor/mediocampista/delantero), apariencia básica
+- Elige un club inicial dentro de una liga con varios equipos controlados por IA
+- Sistema de temporada con fixture (calendario de partidos contra los equipos de la liga)
+- Tabla de posiciones que se actualiza con cada resultado
+- Al finalizar la temporada: sistema de ascenso/descenso entre categorías
+- STATS INDIVIDUALES del jugador (velocidad, fuerza de tiro, pase, resistencia, etc.) que mejoran GRADUALMENTE con el paso de las temporadas y el rendimiento en los partidos (goles, asistencias, minutos jugados) — el jugador debe sentirse "amateur" al principio y ir mejorando de forma realista, no instantánea
+- Los equipos rivales también tienen stats propias, generando diferencia real entre un equipo chico y uno grande
+- Sistema simple de transferencias entre temporadas (ofertas de otros clubes, fichajes del club)
+- Menú de carrera con: calendario de partidos, tabla de posiciones, plantilla del equipo, estadísticas del jugador, historial de carrera (temporadas jugadas, goles totales, trofeos)
+
+REQUISITOS TÉCNICOS:
+- Usar Phaser 3 para el motor del juego (animaciones de sprites, física arcade)
+- Código organizado en módulos/archivos separados por responsabilidad (ej: gameplay del partido, IA, sistema de carrera, UI de menús, manejo de stats/progresión) — nada de un solo archivo gigante
+- Comentarios claros en el código explicando la lógica principal
+- Estructura de proyecto pensada para conectarse a un repositorio de GitHub y seguir siendo desarrollado/iterado desde otras herramientas más adelante
+- Guardado del progreso de la carrera (localStorage o archivo JSON, lo que sea más simple para empezar)
+
+Por ahora priorizá:
+1. Que el partido básico sea jugable (movimiento, tiro/pase, física de la pelota, gol, marcador)
+2. Que la IA de compañeros y rivales sea funcional aunque simple
+3. Que el modo carrera tenga la estructura base (crear jugador, elegir equipo, ver fixture, jugar partidos, ver tabla)
+4. Que el sistema de progresión de stats esté enganchado, aunque sea con una lógica simple al principio
+
+Empezá por la base jugable del partido y la estructura del proyecto antes de meterte de lleno en todos los detalles de la carrera.
