@@ -149,7 +149,7 @@ export default function App() {
 
   if (screen === 'MATCH') {
     const fixture = state.fixtures.find(f => f.matchday === state.currentMatchday && (f.homeTeamId === state.playerTeamId || f.awayTeamId === state.playerTeamId))!;
-    return <MatchScreen fixture={fixture} teams={state.teams} userTeamId={state.playerTeamId!} onMatchComplete={handleMatchComplete} />;
+    return <MatchScreen fixture={fixture} teams={state.teams} userTeamId={state.playerTeamId!} playerStats={state.player?.stats} onMatchComplete={handleMatchComplete} />;
   }
 
   if (screen === 'SEASON_END') return <SeasonEndScreen state={state} onContinue={handleSeasonEndContinue} />;

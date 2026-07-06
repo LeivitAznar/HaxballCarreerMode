@@ -1,90 +1,151 @@
+/**
+ * ai.ts — AI decision-making for CPU-controlled players.
+ *
+ * All AI players have proper Arcade Physics bodies (mass, drag, bounce) so
+ * collisions with the ball and each other are physically correct.
+ * AI movement uses setVelocity() for deterministic targeting; the physics
+ * engine still applies mass, friction, and bounce on collisions.
+ *
+ * AI kicking: when an AI player has possession (within KICK_RANGE of ball),
+ * it shoots toward goal using kickBall() — same cooldown system as the human.
+ */
 import Phaser from 'phaser';
+import { kickBall, KICK_RANGE, AI_KICK_FORCE } from './physics';
 
 interface AIPlayer {
   sprite: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   isHome: boolean;
-  basePos: { x: number, y: number };
+  basePos: { x: number; y: number };
   role: 'GK' | 'DEF' | 'MID' | 'FWD';
 }
 
+/**
+ * Update all AI players for this frame.
+ *
+ * @param aiPlayers  Array of AI player descriptors.
+ * @param ball       The ball sprite.
+ * @param pitchW     Pitch width in pixels.
+ * @param pitchH     Pitch height in pixels.
+ * @param nowMs      Current scene time in ms (scene.time.now).
+ * @param frame      Current update frame counter (for throttling).
+ */
 export function updateAI(
-  aiPlayers: AIPlayer[], 
+  aiPlayers: AIPlayer[],
   ball: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody,
-  pitchWidth: number,
-  pitchHeight: number,
-  time: number
+  pitchW: number,
+  pitchH: number,
+  nowMs: number,
+  frame: number
 ) {
-  // AI Updates every 6 frames to save perf and feel slightly human
-  
+  // Throttle AI logic to every 6 frames — reduces CPU cost, feels slightly human
+  if (frame % 6 !== 0) return;
+
   const ballX = ball.x;
   const ballY = ball.y;
 
   aiPlayers.forEach(ai => {
-    // Skip dead or disabled players
     if (!ai.sprite.active) return;
-    
-    // Random jitter so they don't move too perfectly
-    const jitter = Math.sin(time / 200 + ai.sprite.x) * 10;
-    
-    const goalX = ai.isHome ? pitchWidth : 0; // Where they want to score
-    const ownGoalX = ai.isHome ? 0 : pitchWidth; // Where they defend
-    
-    const distToBall = Phaser.Math.Distance.Between(ai.sprite.x, ai.sprite.y, ballX, ballY);
-    
-    // Find nearest teammate to ball
-    let nearestTeammateToBallDist = 9999;
-    aiPlayers.filter(p => p.isHome === ai.isHome).forEach(p => {
-      const d = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, ballX, ballY);
-      if (d < nearestTeammateToBallDist) nearestTeammateToBallDist = d;
-    });
 
-    const isNearest = distToBall <= nearestTeammateToBallDist + 10;
+    // Subtle jitter so players don't all converge on identical points
+    const jitter = Math.sin(nowMs / 400 + ai.basePos.x * 0.1) * 8;
+
+    // Goal positions: attacking goal X and own goal X
+    const ownGoalX  = ai.isHome ? 0        : pitchW;
+    const goalX     = ai.isHome ? pitchW   : 0;
+
+    const distToBall = Phaser.Math.Distance.Between(
+      ai.sprite.x, ai.sprite.y, ballX, ballY
+    );
+
+    // Determine if this AI is the nearest teammate to the ball
+    let nearestDist = Infinity;
+    aiPlayers
+      .filter(p => p.isHome === ai.isHome)
+      .forEach(p => {
+        const d = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, ballX, ballY);
+        if (d < nearestDist) nearestDist = d;
+      });
+    const isNearest = distToBall <= nearestDist + 12;
 
     let targetX = ai.basePos.x;
     let targetY = ai.basePos.y;
-    let speed = 120; // Default run speed
+    let speed   = 110;
 
+    // ── Role-based behaviour ─────────────────────────────────────────────────
     if (ai.role === 'GK') {
-      // GK tracks ball vertically, stays near goal line
-      targetX = ownGoalX + (ai.isHome ? 40 : -40);
-      
-      if (Math.abs(ballX - targetX) < 300) {
-        targetY = Math.max(pitchHeight / 2 - 40, Math.min(pitchHeight / 2 + 40, ballY));
+      // Goalkeeper: track ball Y near their goal line, never stray too far
+      targetX = ownGoalX + (ai.isHome ? 45 : -45);
+      if (Math.abs(ballX - ownGoalX) < 280) {
+        // Ball is threatening — track ball height
+        targetY = Phaser.Math.Clamp(
+          ballY,
+          pitchH / 2 - 48,
+          pitchH / 2 + 48
+        );
       } else {
-        targetY = pitchHeight / 2;
+        targetY = pitchH / 2;
       }
       speed = 100;
+
+      // GK clears ball if very close
+      if (distToBall < KICK_RANGE) {
+        // Face toward center of pitch (clearing kick)
+        ai.sprite.setData('facingAngle',
+          Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, pitchW / 2, pitchH / 2)
+        );
+        kickBall(ai.sprite, ball, AI_KICK_FORCE * 1.2, 1.0, nowMs);
+      }
+
     } else if (isNearest) {
-      // Nearest player chases ball
+      // Nearest outfield player chases ball
       targetX = ballX + jitter;
       targetY = ballY + jitter;
-      speed = 150;
-      
-      // If we have the ball
-      if (distToBall < 30) {
-        targetX = goalX;
-        targetY = pitchHeight / 2;
-        // Occasional pass/shoot logic could go here
+      speed   = 130;
+
+      if (distToBall < KICK_RANGE) {
+        // In possession — shoot toward goal
+        ai.sprite.setData('facingAngle',
+          Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, goalX, pitchH / 2)
+        );
+        kickBall(ai.sprite, ball, AI_KICK_FORCE, 1.0, nowMs);
+      } else if (distToBall < 80) {
+        // Close to ball — point toward goal as facing angle (pre-aim)
+        ai.sprite.setData('facingAngle',
+          Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, goalX, pitchH / 2)
+        );
       }
+
     } else {
-      // Move to base position relative to ball
-      const ballWeight = 0.3; // How much ball pulls them from formation
-      targetX = ai.basePos.x + (ballX - pitchWidth/2) * ballWeight;
-      targetY = ai.basePos.y + (ballY - pitchHeight/2) * ballWeight;
-      
-      // DEFs stay back more
+      // Off-ball players: float between base position and ball influence
+      const ballWeight = 0.25;
+      targetX = ai.basePos.x + (ballX - pitchW / 2) * ballWeight;
+      targetY = ai.basePos.y + (ballY - pitchH / 2) * ballWeight + jitter;
+
+      // DEF: bias strongly toward own half
       if (ai.role === 'DEF') {
-         targetX = (targetX + ownGoalX) / 2;
+        targetX = (targetX * 0.5 + ownGoalX * 0.5);
       }
+      // FWD: bias toward attacking half when team has ball
+      if (ai.role === 'FWD') {
+        targetX = (targetX * 0.6 + goalX * 0.4);
+      }
+      speed = 110;
     }
 
-    // Apply movement
-    const angle = Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
-    const distToTarget = Phaser.Math.Distance.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
+    // Clamp targets inside pitch with some margin
+    targetX = Phaser.Math.Clamp(targetX, 30, pitchW - 30);
+    targetY = Phaser.Math.Clamp(targetY, 20, pitchH - 20);
 
-    if (distToTarget > 10) {
+    // Move toward target
+    const angle     = Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
+    const distToTgt = Phaser.Math.Distance.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
+
+    if (distToTgt > 12) {
       ai.sprite.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-      ai.sprite.setData('facingAngle', angle);
+      // Store facing angle for potential AI kick
+      if (ai.role !== 'GK') {
+        ai.sprite.setData('facingAngle', angle);
+      }
     } else {
       ai.sprite.setVelocity(0, 0);
     }

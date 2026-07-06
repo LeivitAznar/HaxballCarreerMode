@@ -1,15 +1,16 @@
 import { useState, useCallback, useMemo } from 'react';
 import PhaserGame from '../game/PhaserGame';
-import { Fixture, Team, MatchResult } from '../career/types';
+import { Fixture, Team, MatchResult, PlayerStats } from '../career/types';
 
 interface Props {
   fixture: Fixture;
   teams: Team[];
   userTeamId: string;
+  playerStats?: PlayerStats;
   onMatchComplete: (result: MatchResult) => void;
 }
 
-export function MatchScreen({ fixture, teams, userTeamId, onMatchComplete }: Props) {
+export function MatchScreen({ fixture, teams, userTeamId, playerStats, onMatchComplete }: Props) {
   const homeTeam = teams.find(t => t.id === fixture.homeTeamId)!;
   const awayTeam = teams.find(t => t.id === fixture.awayTeamId)!;
 
@@ -17,11 +18,13 @@ export function MatchScreen({ fixture, teams, userTeamId, onMatchComplete }: Pro
   const [time, setTime] = useState(0);
   const [eventMsg, setEventMsg] = useState<{msg: string, color: string} | null>(null);
 
-  // Memoize matchData so the Phaser game is never destroyed/recreated on score/clock state updates
+  // Memoize matchData so Phaser game is never destroyed/recreated on score/clock state updates.
+  // playerStats drives stat multipliers for kick force and movement speed inside Phaser.
   const matchData = useMemo(() => ({
     homeTeam,
     awayTeam,
-    userTeamId
+    userTeamId,
+    playerStats: playerStats ?? null,
   }), [homeTeam.id, awayTeam.id, userTeamId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMatchEvent = useCallback((e: any) => {
@@ -91,7 +94,8 @@ export function MatchScreen({ fixture, teams, userTeamId, onMatchComplete }: Pro
 
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-muted-foreground text-sm flex gap-6">
         <span><kbd className="bg-muted px-1 rounded border border-border">WASD</kbd> Move</span>
-        <span><kbd className="bg-muted px-1 rounded border border-border">SPACE</kbd> Shoot/Pass</span>
+        <span><kbd className="bg-muted px-1 rounded border border-border">X</kbd> Pass</span>
+        <span><kbd className="bg-muted px-1 rounded border border-border">SPACE</kbd> Shoot</span>
       </div>
     </div>
   );

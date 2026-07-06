@@ -1,0 +1,96 @@
+Actuá como un desarrollador experto en juegos 2D con Phaser 3 y Arcade Physics. Necesito que reescribas/mejorés a nivel de código (no solo visual) los siguientes sistemas del juego. Sé extremadamente preciso en la implementación, usando la API de Arcade Physics correctamente. Evitá soluciones "truco" (como mover manualmente x/y de la pelota) y usá física real basada en velocity, acceleration, drag y bounce.
+
+===========================================
+1. SISTEMA DE MOVIMIENTO DE JUGADORES
+===========================================
+- Cada jugador (this.physics.add.sprite) debe tener body.setCircle() con un radio ajustado al sprite, no un rectángulo default, para que las colisiones sean redondeadas y realistas.
+- Configurar:
+  - body.setMaxVelocity(X) → limitar la velocidad máxima a un valor realista (probar ~120-150 px/s como techo, ajustable por stat de velocidad del jugador).
+  - body.setDrag(600, 600) → fricción para que al soltar la tecla el jugador frene gradualmente, no en seco.
+  - Acelerar con body.setAcceleration() en la dirección del input (no con setVelocity directo), para lograr una curva de arranque suave.
+- Guardar SIEMPRE en una propiedad del jugador (ej: player.facingAngle) el ángulo de Phaser.Math.Angle.Between del último vector de movimiento distinto de cero, en radianes. Esta propiedad no se resetea cuando el jugador está quieto — se mantiene con el último valor válido.
+- Si el jugador tiene un sprite con animaciones direccionales, rotar el sprite o cambiar de frame según facingAngle.
+
+===========================================
+2. FÍSICA DE LA PELOTA (colisión real, no atracción)
+===========================================
+- La pelota (this.physics.add.sprite con body circular) debe tener:
+  - body.setBounce(0.6, 0.6) para rebotes realistas contra jugadores, paredes y postes.
+  - body.setDrag(80, 80) para que pierda velocidad gradualmente por "fricción del césped" y no ruede infinito.
+  - body.setMaxVelocity() con un techo mayor al de los jugadores (la pelota debe poder moverse más rápido que un jugador corriendo).
+- Eliminar cualquier this.physics.add.overlap o lógica que reasigne pelota.x/pelota.y a la posición del jugador. La ÚNICA interacción permitida entre jugador y pelota en movimiento libre es this.physics.add.collider(player, ball) con física de colisión de Arcade (que ya calcula el rebote según masas).
+- Configurar body.setMass() distinto en jugador (ej: 5) y pelota (ej: 1) para que el choque del jugador empuje la pelota con fuerza realista y no al revés.
+
+===========================================
+3. SISTEMA DE PASE (X) Y TIRO (ESPACIO)
+===========================================
+- Crear una función unificada, ej: kickBall(player, ball, force) que:
+  a) Calcule la distancia entre player y ball con Phaser.Math.Distance.Between.
+  b) Si distancia > KICK_RANGE (definir constante, ej: 30px), no hacer nada (return early, sin efecto visual).
+  c) Si distancia <= KICK_RANGE, calcular un vector unitario a partir de player.facingAngle:
+     vx = Math.cos(player.facingAngle) * force
+     vy = Math.sin(player.facingAngle) * force
+  d) Aplicar ball.body.setVelocity(vx, vy) directamente (reemplaza cualquier velocidad previa de la pelota, no la suma).
+- Tecla X → kickBall(player, ball, PASS_FORCE) con PASS_FORCE constante (ej: 250).
+- Barra espaciadora → kickBall(player, ball, SHOT_FORCE) con SHOT_FORCE constante mayor (ej: 450).
+- Estas constantes deben poder multiplicarse por un stat del jugador (ej: player.stats.shotPower como multiplicador 0.8 a 1.3) para que la progresión de carrera tenga impacto real en la física, no solo en un número de UI.
+- Cooldown: agregar un player.canKick = true/false con un pequeño timeout (ej: 300ms) después de cada pase/tiro para evitar espameo de tecla generando múltiples impulsos en el mismo frame.
+
+===========================================
+4. FEEDBACK VISUAL DEL PASE/TIRO (círculo de acción)
+===========================================
+- Crear un Phaser.GameObjects.Graphics o un sprite circular con alpha, posicionado en player.x/player.y.
+- Al ejecutar kickBall con éxito (dentro de rango), disparar un tween:
+  this.tweens.add({
+    targets: kickIndicatorCircle,
+    scale: { from: 0.5, to: 1.5 },
+    alpha: { from: 0.8, to: 0 },
+    duration: 250,
+    ease: 'Cubic.easeOut'
+  })
+- El color del círculo puede variar: uno para pase (ej: azul) y otro para tiro (ej: rojo/naranja), para diferenciar visualmente sin necesidad de leer nada.
+- Importante: este efecto SOLO se dispara dentro del bloque "distancia <= KICK_RANGE" del punto 3, nunca si el kick no conectó.
+
+===========================================
+5. LÍMITES DE CANCHA Y ARCOS (fix de bugs de colisión)
+===========================================
+- Revisar this.physics.world.setBounds(x, y, width, height) y verificar que coincida EXACTAMENTE con las dimensiones del sprite/imagen de la cancha (mismo width/height en píxeles, mismo origen 0,0).
+- El bug de "la pelota entra por los costados" normalmente ocurre porque:
+  a) Los bordes de colisión (paredes invisibles) no cubren el ancho completo del costado de la cancha, dejando huecos en las esquinas o cerca de los arcos, O
+  b) El world.setBounds no coincide con el tamaño visual, generando una franja sin colisión.
+- Solución: crear paredes explícitas con this.physics.add.staticGroup() para cada lado de la cancha (arriba, abajo, izquierda, derecha), EXCEPTO en el hueco exacto donde está la boca del arco (ese hueco debe tener su propia lógica de gol, no colisión).
+- Los arcos deben tener:
+  - Postes y travesaño como static bodies individuales que generan colisión/rebote real de la pelota (bounce), NO overlap zones.
+  - Una zona de gol (this.physics.add.zone) ubicada DETRÁS de la línea de gol, con el ancho exacto entre los dos postes (ni un píxel más), usando overlap con la pelota para disparar goalScored(). Esta zona no debe tener colisión física, solo detección.
+- Verificar que la zona de gol y las paredes laterales de la cancha no se superpongan ni dejen espacio entre ellas — el hueco del arco debe ser EXACTAMENTE el ancho de la portería, cubierto por: pared sólida arriba del arco (si aplica), pared sólida abajo, postes a los costados, y zona de gol detrás.
+
+===========================================
+6. DISEÑO VISUAL DE CANCHA (secundario, después de física)
+===========================================
+- Textura de césped con franjas alternadas (dos tonos de verde) generadas con Phaser.GameObjects.Graphics o una textura tileada, simulando el corte de césped de un estadio real.
+- Líneas de cancha con Graphics.lineStyle() bien definidas: línea de medio campo, círculo central con punto, área grande y chica con sus arcos de vértice, banderines de córner en las 4 esquinas.
+- Arcos con textura de red (patrón cuadriculado semi-transparente) y postes con un pequeño gradiente o sombra para dar sensación de volumen/profundidad.
+
+===========================================
+7. MINIMAPA (cámara secundaria, técnica correcta de Phaser)
+===========================================
+- Usar una SEGUNDA cámara de Phaser (this.cameras.add()) en vez de dibujar manualmente cada elemento a mano:
+  - const minimapCam = this.cameras.add(minimapX, minimapY, minimapWidth, minimapHeight)
+  - minimapCam.setZoom(minimapWidth / fieldWidth) → esto escala automáticamente TODO lo que hay en la escena (jugadores, pelota, cancha) sin tener que replicar posiciones a mano.
+  - minimapCam.setBounds(0, 0, fieldWidth, fieldHeight) para que el minimapa siempre muestre la cancha completa, no haga scroll.
+  - Posicionar la cámara en la parte inferior central de la pantalla: minimapX = (screenWidth - minimapWidth) / 2, minimapY = screenHeight - minimapHeight - margen.
+- Para diferenciar equipos en el minimapa sin duplicar sprites: usar tinta de color en los sprites reales (player.setTint(0x0000ff) para mi equipo, 0xff0000 para rival) y dejar que la minimapCam los muestre igual, solo escalados. Para destacar a MI jugador controlado en el minimapa, agregar un pequeño anillo/marca adicional (un Graphics circle) pegado a su posición que también sea visible en ambas cámaras.
+- Agregar un borde/marco al minimapa con this.cameras.main.ignore() en la cámara principal para que el marco del minimapa no aparezca duplicado en la vista principal (y viceversa: minimapCam.ignore() para ocultar UI de la cámara principal dentro del minimapa, como marcador o menús).
+
+===========================================
+ORDEN DE IMPLEMENTACIÓN OBLIGATORIO
+===========================================
+1) Movimiento y física base de jugadores (punto 1)
+2) Física de pelota sin atracción/imán (punto 2)
+3) Sistema de pase/tiro con rango y fuerza fija (punto 3)
+4) Feedback visual del kick (punto 4)
+5) Fix de límites de cancha y arcos (punto 5)
+6) Diseño visual de cancha (punto 6)
+7) Minimapa con cámara secundaria (punto 7)
+
+No avances al siguiente punto hasta que el anterior esté funcionando correctamente. Si algo requiere reestructurar el objeto Player o Ball (por ejemplo agregar propiedades como facingAngle o canKick), hacelo de forma limpia y documentá con comentarios qué se agregó y por qué.
