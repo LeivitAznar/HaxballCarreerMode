@@ -164,14 +164,14 @@ importers:
         specifier: ~5.9.3
         version: 5.9.3
 
-  artifacts/api-server:
+  attached_assets/artifacts/api-server:
     dependencies:
       '@workspace/api-zod':
         specifier: workspace:*
-        version: link:../../lib/api-zod
+        version: link:../../../lib/api-zod
       '@workspace/db':
         specifier: workspace:*
-        version: link:../../lib/db
+        version: link:../../../lib/db
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -216,7 +216,7 @@ importers:
         specifier: 3.1.0
         version: 3.1.0
 
-  artifacts/football-game:
+  attached_assets/artifacts/football-game:
     dependencies:
       phaser:
         specifier: ^3.90.0
@@ -338,7 +338,7 @@ importers:
         version: 5.2.0(vite@7.3.5(@types/node@25.9.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)(yaml@2.9.0))
       '@workspace/api-client-react':
         specifier: workspace:*
-        version: link:../../lib/api-client-react
+        version: link:../../../lib/api-client-react
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1
@@ -412,7 +412,7 @@ importers:
         specifier: 'catalog:'
         version: 3.25.76
 
-  artifacts/mockup-sandbox:
+  attached_assets/artifacts/mockup-sandbox:
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0

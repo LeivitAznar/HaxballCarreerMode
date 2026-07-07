@@ -1,0 +1,40 @@
+Quiero crear un juego de fútbol offline para navegador, estilo Haxball pero en modo carrera individual (single player, sin multiplayer/online).
+
+STACK TÉCNICO
+- HTML5 Canvas + JavaScript (o TypeScript si es más prolijo) para el motor del juego
+- Sin backend/base de datos por ahora: el progreso se guarda en localStorage
+- Que el proyecto se pueda inicializar con Git desde el inicio (git init + primer commit) para poder conectarlo a GitHub después
+
+GAMEPLAY CORE (el partido)
+- Cancha 2D vista desde arriba (top-down), con física simple estilo Haxball: 
+  - Jugadores y pelota son discos/círculos con aceleración, fricción y rebotes contra las paredes y el arco
+  - Colisión pelota-jugador: la pelota sale despedida según la dirección y velocidad del impacto
+- El usuario controla UN SOLO jugador de su equipo con teclado:
+  - Flechas o WASD para moverse (8 direcciones)
+  - Una tecla para patear/tirar (con más fuerza si se mantiene apretada)
+  - Una tecla para sprint (con costo en la resistencia del jugador)
+- Los otros 10 jugadores (compañeros) y los 11 rivales son controlados por IA simple:
+  - Compañeros: se posicionan razonablemente, intentan pasar o tirar al arco, marcan rivales cerca
+  - Rivales: misma lógica pero con ligera variación de dificultad según la categoría de la liga
+- Partido dura 2 tiempos cortos (ej: 90 segundos cada uno, configurable como constante)
+- Marcador, cronómetro y mini-HUD en pantalla durante el partido
+
+MODO CARRERA
+- El jugador crea su personaje al inicio: nombre, posición (delantero, mediocampista, defensor, arquero) y arranca en un club de categoría baja de una liga ficticia
+- Atributos del jugador: Velocidad, Pase, Tiro, Regate, Defensa, Resistencia (valores iniciales bajos/medios)
+- Liga con varios equipos IA (ej: 8 equipos), fixture de ida y vuelta, tabla de posiciones que se actualiza con cada partido
+- Loop de carrera:
+  1. Pantalla principal de carrera: mostrar tabla de posiciones, próximo partido, stats del jugador
+  2. Botón "Jugar partido" → entra al partido en tiempo real
+  3. Al terminar el partido: pantalla de resumen (goles, asistencias, % de pases, rating del partido)
+  4. Ganás puntos de experiencia según el rendimiento, y podés repartirlos manualmente entre los atributos (como un sistema RPG simple)
+  5. Avanza la fecha del fixture, vuelve a la pantalla principal
+- Fin de temporada: si cumplís un objetivo (ej: terminar entre los primeros 3), te ofrecen pasar a un club de categoría superior; si no, seguís en el mismo club o bajás de categoría
+- Guardar todo el progreso (equipo, atributos, temporada, fixture) en localStorage para que persista al recargar
+
+ALCANCE PARA ESTA PRIMERA VERSIÓN
+- Priorizar que el partido en tiempo real funcione bien (física + controles + IA básica) antes que features de progresión avanzadas
+- Empezar con una sola categoría/liga funcionando de punta a punta (crear jugador → jugar fixture completo → fin de temporada) antes de sumar más categorías
+- UI simple y funcional, no hace falta que sea vistosa todavía
+
+Por favor arrancá por el motor de física y controles del partido (lo más importante y complejo), después la IA básica de jugadores, y por último las pantallas de carrera/progresión.

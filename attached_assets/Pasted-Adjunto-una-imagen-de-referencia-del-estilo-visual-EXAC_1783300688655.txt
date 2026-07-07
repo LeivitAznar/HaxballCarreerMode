@@ -1,0 +1,74 @@
+Adjunto una imagen de referencia del estilo visual EXACTO que quiero para mi juego de fútbol 2D top-down (Phaser 4). Necesito que repliques cada uno de estos elementos con la mayor fidelidad posible:
+
+===========================================
+1. CANCHA
+===========================================
+- Césped con franjas verticales alternadas de dos tonos de verde (efecto de corte de cortadora de césped), franjas de ancho uniforme, dirección vertical (de arriba hacia abajo de la cancha).
+- Líneas blancas de cancha bien marcadas y con buen contraste: línea perimetral, línea de medio campo, círculo central, punto central, áreas grandes (rectángulo) en cada arco, semicírculo en el borde del área grande, arcos de esquina (cuartos de círculo) en las 4 esquinas.
+- Un logo/watermark sutil y semi-transparente en el círculo central (en la referencia dice "F5" pero puede ser el nombre/logo del juego), en color blanco traslúcido, no debe interferir con la visibilidad del juego.
+
+===========================================
+2. ARCOS
+===========================================
+- Arcos vistos desde arriba, con marco blanco (postes) bien definido.
+- Red visible con textura de malla dentro del marco del arco.
+- Ubicados centrados en cada línea de fondo, con el ancho de portería proporcional al ancho real de una cancha de fútbol.
+
+===========================================
+3. JUGADORES (representación visual)
+===========================================
+- Cada jugador se representa como un CÍRCULO de color sólido con borde (stroke) más oscuro o contrastante, con el NÚMERO de camiseta en el centro del círculo en texto blanco bold.
+- Debajo de cada círculo, el APELLIDO del jugador en texto blanco pequeño, bold, con un leve contorno/sombra oscura para que se lea sobre el césped.
+- Color de círculo según equipo: un equipo en azul (tono similar a #1E3A8A o similar azul marino/vivo), el otro en rojo (similar a #B91C1C o rojo intenso).
+- El arquero de cada equipo debe tener el mismo estilo de círculo pero puede diferenciarse con un tono ligeramente distinto dentro de la paleta de su equipo si es necesario para distinguirlo (opcional, prioridad baja).
+- Indicador de posesión: un pequeño TRIÁNGULO apuntando hacia abajo, del color del equipo correspondiente, flotando justo arriba del círculo del jugador que tiene o está más cerca de la pelota / la está disputando. Debe aparecer sobre el jugador relevante en tiempo real (el que tiene el control o el que está en la jugada de disputa).
+
+===========================================
+4. PELOTA
+===========================================
+- Pelota clásica blanca con el patrón de pentágonos negros típico (icónico de balón de fútbol), tamaño pequeño y proporcional a los jugadores, con un pequeño sombreado/gradiente para dar sensación de volumen (no completamente plana).
+
+===========================================
+5. HUD SUPERIOR (marcador)
+===========================================
+- Barra superior centrada con: nombre/abreviatura del equipo 1 en un rectángulo de color de su equipo (ej: azul, texto blanco bold), luego el marcador numérico en el centro sobre fondo negro/oscuro grande (ej: "2 - 1"), luego nombre/abreviatura del equipo 2 en rectángulo de su color (rojo).
+- Debajo del marcador numérico, un cronómetro de partido en formato MM:SS, texto blanco sobre fondo oscuro, tamaño más chico que el marcador.
+- A los costados del marcador central, espacio para "publicidad de estadio" decorativa (rectángulos oscuros con texto tipo sponsor, puede ser texto genérico o el nombre del juego repetido), simulando vallas publicitarias de estadio.
+
+===========================================
+6. MINIMAPA (bottom center)
+===========================================
+- Ubicado en la parte inferior central de la pantalla, dentro de un rectángulo con fondo verde oscuro y borde definido.
+- Muestra la cancha completa en miniatura (con arcos marcados como pequeños rectángulos en cada extremo), y todos los jugadores como puntitos de color (azul/rojo según equipo) en sus posiciones relativas reales, más la pelota como puntito blanco.
+- Debe actualizarse en tiempo real reflejando el movimiento de todos los elementos del partido.
+
+===========================================
+7. PANEL DE CONTROLES (bottom right)
+===========================================
+- Un recuadro oscuro semi-transparente en la esquina inferior derecha con dos filas:
+  - Fila 1: un ícono/tecla cuadrada mostrando "X" con borde celeste/resaltado, y al lado el texto "TIRO"
+  - Fila 2: un ícono/tecla mostrando "ESPACIO" (rectángulo más ancho) y al lado el texto "PASE"
+- Estilo minimalista, fondo oscuro translúcido (rgba negro con opacidad ~0.7-0.8), esquinas levemente redondeadas, texto blanco bold.
+- Este panel debe ser siempre visible durante el partido como referencia rápida de controles.
+
+===========================================
+8. AMBIENTACIÓN DE ESTADIO (bordes de pantalla)
+===========================================
+- Alrededor de la cancha, en los bordes superior e inferior de la pantalla (fuera del área jugable), simular graderías o vallas publicitarias oscuras con texto tipo sponsor repetido, dando sensación de estadio real.
+- Un par de detalles de "reflectores/luces de estadio" en las esquinas superiores (pequeños íconos de luz blanca), opcional pero suma al ambiente.
+
+===========================================
+PRIORIDAD DE IMPLEMENTACIÓN
+===========================================
+1. Césped con franjas + líneas de cancha + arcos con red (base visual del campo de juego)
+2. Jugadores como círculos con número + nombre + color de equipo
+3. Indicador de posesión (triángulo)
+4. Pelota con textura de pentágonos
+5. HUD superior (marcador + cronómetro)
+6. Minimapa inferior
+7. Panel de controles inferior derecho
+8. Detalles de ambientación de estadio (esto es lo menos prioritario, hacerlo último y solo si no afecta el rendimiento)
+
+Mantené el rendimiento del juego como prioridad — todos estos elementos visuales deben implementarse de forma eficiente (usar Graphics/Textures generadas una sola vez y reutilizadas, no recrear objetos gráficos en cada frame salvo lo que realmente necesite actualizarse como el minimapa y el indicador de posesión).
+
+Te adjunto la imagen de referencia para que la sigas al pixel en cuanto a paleta de colores, proporciones y disposición de elementos.
