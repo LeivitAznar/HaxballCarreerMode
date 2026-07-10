@@ -186,7 +186,7 @@ export default class MatchScene extends Phaser.Scene {
     sanitizeBody(this.ball, PITCH_W / 2, PITCH_H / 2, 'ball');
 
     this.updateUserPlayer();
-    updateAI(this.aiPlayers, this.ball, PITCH_W, PITCH_H, this.time.now, this.frameCount);
+    // updateAI(this.aiPlayers, this.ball, PITCH_W, PITCH_H, this.time.now, this.frameCount);
     // Apply speed penalty to any player currently in contact with the ball
     this.applyContactSpeedPenalty();
     this.syncVisuals();
