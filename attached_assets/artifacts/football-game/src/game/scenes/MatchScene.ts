@@ -976,22 +976,35 @@ export default class MatchScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
 
   private resetPositions() {
-    this.ball.setPosition(PITCH_W / 2, PITCH_H / 2);
+  // Ball
+  this.ball.setPosition(PITCH_W / 2, PITCH_H / 2);
+
+  if (this.ball.body) {
+    this.ball.body.enable = true;
     this.ball.body.setVelocity(0, 0);
     this.ball.body.setAcceleration(0, 0);
-
-    const homeSlots = getFormationPositions('6-ASIDE', true,  PITCH_W, PITCH_H);
-    const awaySlots = getFormationPositions('6-ASIDE', false, PITCH_W, PITCH_H);
-    let hi = 0, ai = 0;
-
-    (this.players.getChildren() as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody[]).forEach(p => {
-      const slots = (p.getData('isHome') as boolean) ? homeSlots : awaySlots;
-      const idx   = (p.getData('isHome') as boolean) ? hi++ : ai++;
-      if (slots[idx]) {
-        p.setPosition(slots[idx].x, slots[idx].y);
-        p.body.setVelocity(0, 0);
-        p.body.setAcceleration(0, 0);
-      }
-    });
   }
+
+  const homeSlots = getFormationPositions('6-ASIDE', true, PITCH_W, PITCH_H);
+  const awaySlots = getFormationPositions('6-ASIDE', false, PITCH_W, PITCH_H);
+
+  let hi = 0;
+  let ai = 0;
+
+  (this.players.getChildren() as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody[]).forEach((p) => {
+    const slots = p.getData('isHome') ? homeSlots : awaySlots;
+    const idx = p.getData('isHome') ? hi++ : ai++;
+
+    if (!slots[idx]) return;
+
+    p.setPosition(slots[idx].x, slots[idx].y);
+
+    // Si por alguna razón el body está deshabilitado,
+    // lo volvemos a activar antes de tocar la física.
+    if (p.body) {
+      p.body.enable = true;
+      p.body.setVelocity(0, 0);
+      p.body.setAcceleration(0, 0);
+    }
+  });
 }
