@@ -1,0 +1,131 @@
+Actuá como un ingeniero senior especializado en motores de física 2D para juegos deportivos (referencia técnica: Haxball). Necesito 4 sistemas trabajados a fondo, con precisión de implementación. El proyecto usa Phaser 4 (Arcade Physics), TypeScript, constantes ya existentes en physics.ts (PLAYER_MAX_VEL, PLAYER_ACCEL, PLAYER_DRAG, PLAYER_MASS, BALL_MASS, BALL_DRAG, BALL_BOUNCE, PASS_FORCE, SHOT_FORCE, KICK_RANGE, KICK_COOLDOWN, AI_KICK_FORCE). Reutilizá y modificá esos nombres, no inventes nuevos si ya existen equivalentes.
+
+===========================================
+SECCIÓN 1: DIAGNÓSTICO Y FIX — JUGADORES QUE DESAPARECEN
+===========================================
+Este bug tiene 5 causas típicas en juegos Arcade Physics top-down. Revisá y corregí CADA UNA sistemáticamente, no asumas una sola causa:
+
+a) NaN POSITION LEAK (causa más probable): en la lógica de IA (ai.ts), cualquier cálculo de ángulo/dirección hacia un objetivo (Math.atan2, normalización de vectores) que divida por una distancia de 0 (cuando el jugador IA y su objetivo están exactamente en la misma posición) produce NaN. Un sprite con x/y = NaN deja de renderizarse pero sigue "existiendo" en el Group, dando la sensación de que desapareció. FIX: agregar un guard antes de cualquier división por distancia:
+   if (distance < 0.01) { /* usar último ángulo válido o saltar este frame */ }
+   Además, agregá un watchdog temporal de debug: en el update principal, recorré this.players.getChildren() y si sprite.x/y es NaN o Infinity, console.warn con el ID del jugador y el stack de la última acción que tomó, para identificar el punto exacto de origen antes de sacar el watchdog.
+
+b) BODY DISABLED SIN RE-HABILITAR: revisá toda lógica de gol/reset/medio tiempo que llame a body.enable = false, setActive(false) o setVisible(false) — confirmá que TODOS los caminos de reset (gol normal, fin de primer tiempo, reinicio de posiciones) pasen por la MISMA función de restauración, no una función distinta por cada caso que pueda olvidarse de reactivar algún jugador.
+
+c) LÍMITE DE GRUPO (max size): si this.players es un Group creado con un config.maxSize, confirmá que nunca se intente crear más sprites de los permitidos — group.create() devuelve null al exceder el límite, y si el código no chequea ese null antes de usarlo, puede dejar referencias húerfanas.
+
+d) TEXTURA/FRAME INVÁLIDO: si en algún punto se llama a sprite.setTexture() o setFrame() con una key que no existe (por ejemplo al cambiar de escena en medio tiempo), el sprite queda sin textura visible aunque el body siga activo. Verificá que todas las texturas usadas en transiciones de escena estén precargadas en BootScene antes de usarse.
+
+e) CÁMARA / DEPTH: confirmá que ningún jugador quede con setDepth() por debajo del fondo de cancha después de alguna transición, y que this.cameras.main.setBounds() no esté cortando parte del campo donde los jugadores pueden posicionarse.
+
+Implementá un modo de debug temporal (activable con una tecla o flag, ej. DEBUG_MODE = true) que dibuje un contorno rojo alrededor de cualquier sprite con body.enable = false o posición NaN, para volver visualmente obvio cuál de estas causas es la real en este proyecto específico.
+
+===========================================
+SECCIÓN 2: CONTROLES MÓVILES (joystick + botones, estilo Mamoball)
+===========================================
+IMPORTANTE — arquitectura de input unificada: no dupliques la lógica de movimiento. Creá una única función getMovementVector() que devuelva {x, y} normalizado entre -1 y 1, alimentada por teclado (WASD/flechas) EN DESKTOP o por el joystick virtual EN TOUCH. El resto del sistema de aceleración (Sección 3) consume ese vector sin saber de dónde vino.
+
+a) JOYSTICK VIRTUAL (esquina inferior izquierda):
+   - Dos círculos concéntricos dibujados con Graphics: un "base" fijo semi-transparente (radio ~50px) y un "thumb" que se mueve dentro de él (radio ~22px).
+   - En pointerdown dentro del área del joystick, capturar pointer.id específico (guardarlo en una variable joystickPointerId) para trackear ESE puntero en particular durante todo el gesto, ignorando otros pointerdown que caigan fuera de esa zona.
+   - En pointermove, si pointer.id === joystickPointerId, calcular el vector desde el centro del "base" hasta la posición actual del dedo, clampeado al radio máximo del base (Phaser.Math.Clamp en la magnitud del vector, no en cada eje por separado, para que el clamp sea circular y no cuadrado).
+   - El vector normalizado (magnitud / radioMáximo) es lo que alimenta getMovementVector().
+   - En pointerup del mismo pointer.id, resetear el thumb al centro y el vector a {0,0}.
+
+b) BOTONES DE ACCIÓN (esquina inferior derecha, ya definidos visualmente en el HUD existente):
+   - Botón PASE y botón TIRO como zonas circulares interactivas (this.add.circle(...).setInteractive()), cada uno disparando exactamente la misma función kickBall() que ya usan las teclas X/Espacio en desktop. No crear una segunda implementación de kick para touch.
+   - Usar pointerdown (no pointerup) para el disparo de la acción, para que la respuesta se sienta inmediata.
+
+c) MULTI-TOUCH — REQUISITO CRÍTICO: por default Phaser solo trackea 1-2 punteros simultáneos. Para que el joystick (un dedo) y un botón de acción (otro dedo) funcionen AL MISMO TIEMPO, es obligatorio configurar en el gameConfig o en create():
+   this.input.addPointer(2); // habilita hasta 3-4 punteros simultáneos totales
+   Sin esto, tocar el botón de tiro mientras se mueve el joystick puede no registrar el segundo toque, o cancelar el primero. Probá explícitamente el caso "moverme con el joystick Y tirar al mismo tiempo" como caso de aceptación.
+
+d) PREVENCIÓN DE GESTOS DEL NAVEGADOR: agregar en el CSS del contenedor del juego touch-action: none; y en los listeners táctiles relevantes { passive: false } con preventDefault(), para que el navegador no interprete los toques como scroll/zoom/pull-to-refresh durante el partido.
+
+e) DETECCIÓN DE DISPOSITIVO: usar this.sys.game.device.input.touch para instanciar el joystick y los botones SOLO si el dispositivo es táctil (no mostrar controles táctiles superpuestos en desktop, no perder los controles de teclado en desktop). El teclado debe seguir funcionando de forma completamente independiente en todo momento.
+
+===========================================
+SECCIÓN 3: FÍSICA ESTILO HAXBALL (recalibración con fixed timestep)
+===========================================
+El motor Arcade estándar de Phaser (velocity/drag lineal) no puede replicar bien la sensación de Haxball, porque Haxball usa damping MULTIPLICATIVO por frame de física (velocity *= damping cada tick), no drag lineal. Esto genera una curva de frenado que decae rápido al principio y se suaviza asintóticamente, en vez de frenar a tasa constante hasta cero como hace setDrag(). Implementá esto:
+
+a) FIXED TIMESTEP (independiente del framerate — esto también previene bugs cross-platform):
+   Implementá un acumulador de tiempo en el update principal, corriendo la física en pasos fijos de 1/60s sin importar el FPS real del dispositivo (celulares pueden correr a 30/60/90/120fps):
+
+   private physicsAccumulator = 0;
+   private readonly FIXED_STEP = 1000 / 60; // ms
+
+   update(time: number, delta: number) {
+     this.physicsAccumulator += delta;
+     while (this.physicsAccumulator >= this.FIXED_STEP) {
+       this.fixedPhysicsUpdate(this.FIXED_STEP / 1000); // dt en segundos
+       this.physicsAccumulator -= this.FIXED_STEP;
+     }
+     this.syncVisuals(); // esto sí puede correr cada frame de render, no hace falta fixed
+   }
+
+   Esto asegura que el juego se sienta IGUAL en PC a 144Hz que en un celular a 60Hz — resuelve de raíz varios de los "errores" que mencionás que aparecen en celular vs PC.
+
+b) DAMPING MULTIPLICATIVO (reemplaza PLAYER_DRAG lineal actual):
+   Estos valores son coeficientes adimensionales (ratios), se usan directo sin conversión de escala:
+   
+   export const PLAYER_DAMPING = 0.96; // por tick fijo de 1/60s
+   export const BALL_DAMPING   = 0.99; // por tick fijo — la pelota mantiene mucha más velocidad que el jugador, rueda más lejos
+
+   En fixedPhysicsUpdate, para cada jugador:
+   player.body.velocity.x *= PLAYER_DAMPING;
+   player.body.velocity.y *= PLAYER_DAMPING;
+   // luego SUMAR la aceleración del input (no usar setAcceleration continuo de Arcade, aplicarlo manualmente cada tick fijo):
+   player.body.velocity.x += inputVector.x * PLAYER_ACCEL_PER_TICK;
+   player.body.velocity.y += inputVector.y * PLAYER_ACCEL_PER_TICK;
+
+   Y para la pelota (sin input propio, solo damping — la pelota nunca se auto-acelera, solo pierde velocidad o la gana por colisión/patada):
+   ball.body.velocity.x *= BALL_DAMPING;
+   ball.body.velocity.y *= BALL_DAMPING;
+
+c) CALIBRACIÓN DE VELOCIDAD ("un poco más rápido" que la versión anterior, sin volver al extremo flotante original):
+   Con damping 0.96/tick, la velocidad de equilibrio (steady-state) es accel / (1 - damping) = accel / 0.04 = accel * 25. Para lograr una velocidad tope de jugador de ~170-180 px/s (más rápido que los 150 px/s "realistas" anteriores, pero lejos del extremo arcade original):
+
+   export const PLAYER_ACCEL_PER_TICK = 7; // → steady state ≈ 7*25 = 175 px/s en velocidad de tick, ajustable ±20% probando el feel
+
+   No hace falta un setMaxVelocity() explícito — el propio equilibrio matemático del sistema damping/aceleración genera el tope de velocidad de forma natural, igual que en Haxball. Podés dejar un maxVelocity de seguridad muy por encima (ej: 400 px/s) solo como salvaguarda ante bugs, no como límite de diseño.
+
+d) MASAS — corregir ratio (dato real de Haxball: jugador es 2x más pesado que la pelota, no 5x):
+   export const PLAYER_MASS = 2.2; // antes 5 — Haxball usa ratio real ~2:1, 5:1 hacía que la pelota se sienta como un objeto inerte pesado en vez de reactiva
+   export const BALL_MASS   = 1;   // sin cambios
+
+e) SISTEMA DE PATADA EN DOS PARTES (esto es lo que realmente distingue el "feel" de Haxball — actualmente el proyecto solo hace un impulso discreto a la pelota, falta la parte del "lunge" del jugador):
+   
+   PARTE 1 — Lunge del jugador (nuevo): mientras el jugador está en KICK_RANGE de la pelota Y mantiene presionado el botón de pase/tiro, aplicar una aceleración EXTRA al jugador mismo (no a la pelota) en su facingAngle, simulando el cuerpo lanzándose hacia el balón:
+   
+   export const KICK_LUNGE_ACCEL = PLAYER_ACCEL_PER_TICK * 1.4; // 40% extra sobre la aceleración normal
+   export const KICK_LUNGE_DURATION_MS = 120;
+   
+   PARTE 2 — Impulso discreto a la pelota (ya existe, mantener PASS_FORCE/SHOT_FORCE actuales pero subir levemente para acompañar el "un poco más rápido" general):
+   export const PASS_FORCE = 280; // antes ~250
+   export const SHOT_FORCE = 500; // antes ~450
+   
+   Esta combinación (el jugador se lanza levemente hacia la pelota al mismo tiempo que la pelota recibe el impulso directo) es la que da la sensación característica de "golpe con el cuerpo" de Haxball, en vez de "la pelota sale disparada sola sin que el jugador se mueva".
+
+f) REBOTES: mantené el bounce de jugador-vs-jugador moderado (0.15-0.2, valor ya usado) y el de pelota contra paredes/postes más vivo (0.6-0.65, ya usado) — esta asimetría (pelota más "viva" que los choques entre cuerpos) es consistente con el comportamiento real de Haxball y no requiere cambios adicionales a los que ya tienen.
+
+===========================================
+SECCIÓN 4: VALIDACIÓN CROSS-PLATFORM (PC + CELULAR SIN ERRORES)
+===========================================
+Checklist obligatorio antes de dar por terminado:
+- [ ] El fixed timestep de la Sección 3a está corriendo igual en un test forzando FPS bajo (throttle de CPU en devtools) — el partido debe demorar lo mismo en tiempo real, no "ir más lento" en un dispositivo con menos FPS.
+- [ ] Joystick + botón de acción funcionan simultáneamente en un dispositivo táctil real o emulado con multi-touch (no solo mouse simulando touch, que registra un solo puntero).
+- [ ] Ningún error de consola al cambiar de escena (medio tiempo → segundo tiempo → fin de partido) en ninguna de las dos plataformas.
+- [ ] Los controles de teclado (X, Espacio, WASD/flechas) siguen funcionando en desktop sin que el código de joystick/botones interfiera o capture inputs que no le corresponden.
+- [ ] Ningún jugador queda con posición NaN durante un partido completo de prueba (usar el watchdog de la Sección 1 para confirmar esto en un playtest de al menos 2 partidos completos).
+
+===========================================
+ORDEN DE IMPLEMENTACIÓN OBLIGATORIO
+===========================================
+1. Sección 1 (fix de jugadores que desaparecen) — es un bug, bloquea todo lo demás si sigue rompiendo partidos
+2. Sección 3a (fixed timestep) — es la base técnica de la que depende el resto de la física
+3. Sección 3b-3d (damping multiplicativo, calibración de velocidad, masas)
+4. Sección 3e (sistema de patada en dos partes)
+5. Sección 2 (controles móviles) — ya con la física estable, conectar el input táctil
+6. Sección 4 (validación cross-platform) — checklist final antes de considerarlo terminado
+
+No avances de sección sin confirmar que la anterior funciona. Si el fixed timestep (3a) requiere refactorizar el update() principal de forma invasiva, hacelo con cuidado y comentá claramente qué cambió y por qué, ya que probablemente toque código que ya funciona bien (rendering, HUD, minimapa) y que no debe romperse en el proceso.
