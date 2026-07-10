@@ -1008,3 +1008,4 @@ export default class MatchScene extends Phaser.Scene {
     }
   });
 }
+}
