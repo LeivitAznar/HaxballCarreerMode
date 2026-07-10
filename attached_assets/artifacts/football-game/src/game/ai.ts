@@ -137,17 +137,22 @@ export function updateAI(
     targetY = Phaser.Math.Clamp(targetY, 20, pitchH - 20);
 
     // Move toward target
-    const angle     = Phaser.Math.Angle.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
-    const distToTgt = Phaser.Math.Distance.Between(ai.sprite.x, ai.sprite.y, targetX, targetY);
+    // Move toward target (usando aceleración en vez de velocidad directa)
+const dx = targetX - ai.sprite.x;
+const dy = targetY - ai.sprite.y;
+const distToTgt = Math.sqrt(dx * dx + dy * dy);
 
-    if (distToTgt > 12) {
-      ai.sprite.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-      // Store facing angle for potential AI kick
-      if (ai.role !== 'GK') {
-        ai.sprite.setData('facingAngle', angle);
-      }
-    } else {
-      ai.sprite.setVelocity(0, 0);
-    }
+if (distToTgt > 12) {
+  const nx = dx / distToTgt;
+  const ny = dy / distToTgt;
+
+  ai.sprite.body.setAcceleration(nx * 500, ny * 500);
+
+  if (ai.role !== 'GK') {
+    ai.sprite.setData('facingAngle', Math.atan2(ny, nx));
+  }
+} else {
+  ai.sprite.body.setAcceleration(0, 0);
+}
   });
 }
