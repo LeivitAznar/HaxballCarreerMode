@@ -11,10 +11,11 @@ import Phaser from 'phaser';
 
 // ── Player physics ───────────────────────────────────────────────────────────
 export const PLAYER_RADIUS  = 12;   // px  — visual circle radius; also used for physics body
-export const PLAYER_MASS    = 5;    // heavier than ball so player dominates on collision
-export const PLAYER_MAX_VEL = 130;  // px/s base — scaled by speed stat at runtime
-export const PLAYER_ACCEL   = 900;  // px/s² — how fast player reaches max velocity
-export const PLAYER_DRAG    = 600;  // px/s² — braking when no input
+export const PLAYER_MASS    = 2.4;  // was 5 — Haxball's real player:ball mass ratio is ~2:1,
+                                     // 5:1 made the ball feel like an inert weight instead of reactive
+export const PLAYER_MAX_VEL = 168;  // px/s base — was 130, bumped up per "un poco más rápido"
+export const PLAYER_ACCEL   = 1080; // px/s² — scaled up with max vel to keep the same ~0.15s ramp-up feel
+export const PLAYER_DRAG    = 720;  // px/s² — scaled up with max vel to keep the same ~0.22s braking feel
 
 // ── Ball physics ─────────────────────────────────────────────────────────────
 export const BALL_RADIUS  = 8;    // px  — match BootScene 'ball' texture radius (16x16 → r=8)
@@ -25,10 +26,10 @@ export const BALL_BOUNCE  = 0.65; // coefficient — applied against walls and g
 
 // ── Kick constants ───────────────────────────────────────────────────────────
 export const KICK_RANGE    = 34;   // px center-to-center to trigger a kick
-export const PASS_FORCE    = 260;  // px/s base
-export const SHOT_FORCE    = 460;  // px/s base
-export const KICK_COOLDOWN = 300;  // ms between kicks for human player
-export const AI_KICK_FORCE = 320;  // AI uses a single mid-range force
+export const PASS_FORCE    = 300;  // px/s base — was 260
+export const SHOT_FORCE    = 520;  // px/s base — was 460
+export const KICK_COOLDOWN = 260;  // ms between kicks for human player — was 300, snappier
+export const AI_KICK_FORCE = 360;  // AI uses a single mid-range force — was 320
 
 // ── Haxball-style contact physics ────────────────────────────────────────────
 
@@ -157,5 +158,38 @@ export function kickBall(
   );
 
   player.setData('kickCooldownUntil', nowMs + KICK_COOLDOWN);
+  return true;
+}
+
+/**
+ * Safety net against the "players disappearing" bug.
+ *
+ * The most common cause of a sprite silently vanishing in Arcade Physics is a
+ * NaN or Infinity creeping into its position or velocity (usually from a
+ * division by zero somewhere upstream — e.g. normalising a zero-length vector
+ * in AI targeting code). A sprite with NaN x/y still "exists" in its Group,
+ * but never renders again — from the player's perspective it just disappeared.
+ *
+ * Call this once per player per frame (cheap check). If it returns true, the
+ * sprite was corrupted and has been recovered back to a safe fallback
+ * position with zero velocity — log this in the console so the real upstream
+ * cause (likely in ai.ts) can be tracked down and fixed properly.
+ */
+export function sanitizeBody(
+  sprite: Phaser.Types.Physics.Arcade.SpriteWithDynamicBody,
+  fallbackX: number,
+  fallbackY: number,
+  label = 'sprite'
+): boolean {
+  const bad =
+    !Number.isFinite(sprite.x) || !Number.isFinite(sprite.y) ||
+    !Number.isFinite(sprite.body.velocity.x) || !Number.isFinite(sprite.body.velocity.y);
+
+  if (!bad) return false;
+
+  console.warn(`[sanitizeBody] Recovered corrupted position on "${label}" — was (${sprite.x}, ${sprite.y}), velocity (${sprite.body.velocity.x}, ${sprite.body.velocity.y}). Resetting to fallback.`);
+  sprite.setPosition(fallbackX, fallbackY);
+  sprite.body.setVelocity(0, 0);
+  sprite.body.setAcceleration(0, 0);
   return true;
 }
