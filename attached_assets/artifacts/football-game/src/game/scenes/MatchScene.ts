@@ -452,14 +452,30 @@ export default class MatchScene extends Phaser.Scene {
     const color = isShot ? 0xff6600 : 0x0088ff;
     this.kickIndicator.clear();
     this.kickIndicator.lineStyle(3, color, 1);
-    this.kickIndicator.strokeCircle(0, 0, 20);
-    this.kickIndicator.setPosition(x, y).setScale(0.5).setAlpha(0.8);
+    this.kickIndicator.strokeCircle(0, 0, 22);
+    this.kickIndicator.setPosition(x, y).setScale(0.5).setAlpha(0.9);
     this.tweens.killTweensOf(this.kickIndicator);
     this.tweens.add({
       targets: this.kickIndicator,
-      scale: { from: 0.5, to: 1.5 }, alpha: { from: 0.8, to: 0 },
-      duration: 250, ease: 'Cubic.easeOut',
+      scale: { from: 0.5, to: 1.8 }, alpha: { from: 0.9, to: 0 },
+      duration: 220, ease: 'Cubic.easeOut',
     });
+
+    // Squash & stretch on the ball — visual deformation on impact
+    this.tweens.killTweensOf(this.ball);
+    const angle = (this.userPlayer?.getData('facingAngle') as number) ?? 0;
+    this.ball.setRotation(angle);
+    this.tweens.add({
+      targets: this.ball,
+      scaleX: { from: isShot ? 0.6 : 0.75, to: 1 },
+      scaleY: { from: isShot ? 1.5 : 1.3,  to: 1 },
+      duration: 130, ease: 'Back.easeOut',
+    });
+
+    // Camera shake on shots — subtle, not nauseating
+    if (isShot) {
+      this.cameras.main.shake(90, 0.005);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -612,7 +628,18 @@ export default class MatchScene extends Phaser.Scene {
         ballObj   as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody,
       );
     });
-    this.physics.add.collider(this.players, this.players);
+    // Player-player collisions: shake camera on hard hits
+    this.physics.add.collider(this.players, this.players, (a, b) => {
+      const pa = a as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+      const pb = b as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
+      const relSpeed = Math.sqrt(
+        Math.pow(pa.body.velocity.x - pb.body.velocity.x, 2) +
+        Math.pow(pa.body.velocity.y - pb.body.velocity.y, 2)
+      );
+      if (relSpeed > 120) {
+        this.cameras.main.shake(60, 0.003);
+      }
+    });
     this.physics.add.collider(this.players, this.walls);
   }
 
