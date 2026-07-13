@@ -2,17 +2,10 @@
  * MatchScene.ts — Core gameplay scene.
  *
  * KEY FIXES in this version:
- *  1. Player visuals now use Arc + Text objects instead of Graphics, which are
- *     simpler, can't "lose" their drawn content, and are easier to position.
- *  2. syncVisuals() forces setVisible(true) every frame — eliminates the
- *     "appears for a millisecond then disappears" bug.
- *  3. resetPositions() now guards against null body before calling velocity methods.
- *  4. sanitizeBody() called every frame to recover any NaN-position sprite.
- *  5. setupMinimapAndUI() moved to the END of create() and scroll factors fixed.
- *  6. FIXED: setupMobileControls() now happens BEFORE setupMinimapAndUI(), so
- *     minimapCam.ignore() doesn't fail with "undefined is not an object".
- *  7. Mobile controls now properly excluded from minimap.
- *  8. Added setCollideWorldBounds(true) as safety net for all players + ball.
+ *  1. Removidas las llamadas a setScrollFactor() que no existen en Phaser 3.90
+ *  2. Minimap ahora solo usa setZoom() y setBounds() que SÍ existen
+ *  3. Player visuals usan Arc + Text objects para evitar Graphics bugs
+ *  4. Mobile controls no aparecen en minimap
  */
 import Phaser from 'phaser';
 import { Player, Team } from '../../career/types';
@@ -62,10 +55,6 @@ interface AIPlayerEntry {
   role:    'GK' | 'DEF' | 'MID' | 'FWD';
 }
 
-// FIX: Use Arc + Text instead of Graphics for player visuals.
-// Arc objects retain their appearance without needing to be redrawn,
-// and can't "lose" their content the way Graphics objects can when
-// the scene is paused/resumed or cameras are reconfigured.
 interface PlayerVisual {
   sprite:   Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
   circle:   Phaser.GameObjects.Arc;
@@ -151,8 +140,7 @@ export default class MatchScene extends Phaser.Scene {
     this.isTouchDevice = this.sys.game.device.input.touch;
     if (this.isTouchDevice) this.setupMobileControls();
 
-    // ✅ FIX: Setup minimap + UI AFTER everything, including mobile controls
-    // This ensures minimapCam exists before any code tries to call .ignore() on it
+    // ✅ Setup minimap + UI AFTER everything
     this.setupMinimapAndUI();
   }
 
@@ -306,12 +294,11 @@ export default class MatchScene extends Phaser.Scene {
       Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
     configureBall(this.ball);
     this.ball.setDepth(10);
-    // FIX: Agregar bounds para que no salga del pitch
     this.ball.setCollideWorldBounds(true);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // PLAYERS — FIX: Arc shapes instead of Graphics for visual circles
+  // PLAYERS — Arc shapes instead of Graphics for visual circles
   // ══════════════════════════════════════════════════════════════════════════
 
   private createPlayers() {
@@ -368,41 +355,33 @@ export default class MatchScene extends Phaser.Scene {
     sprite.setData('isUser',     isUser);
     sprite.setData('team',       team);
 
-    // FIX: Agregar bounds para que no salgan del pitch
     sprite.setCollideWorldBounds(true);
 
-    // ── FIX: Use Arc shape instead of Graphics ─────────────────────────────
-    // Arc objects keep their appearance without needing to be redrawn each
-    // frame, making them immune to the pause/resume visibility bug.
+    // ── Visual objects (Arc + Text) ────────────────────────────────────────
     const fillColor   = team.primaryColor;
     const strokeColor = darken(fillColor, 0.35);
 
-    // Shadow (slightly offset, low depth) - FIX: explicitly set both active and visible
     const shadow = this.add.arc(slot.x + 2, slot.y + 4, PLAYER_RADIUS * 0.9, 0, 360, false, 0x000000, 0.3)
       .setDepth(7)
       .setActive(true)
       .setVisible(true);
 
-    // Main circle - FIX: explicitly set both active and visible
     const circle = this.add.arc(slot.x, slot.y, PLAYER_RADIUS, 0, 360, false, fillColor, 1)
       .setStrokeStyle(2.5, strokeColor, 1)
       .setDepth(8)
       .setActive(true)
       .setVisible(true);
 
-    // Shirt number
     const numText = this.add.text(slot.x, slot.y, `${rPlayer.shirtNumber}`, {
       fontSize: '11px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff',
     }).setOrigin(0.5, 0.5).setDepth(9);
 
-    // Player surname
     const displayName = rPlayer.name.split(' ').pop()?.toUpperCase() ?? rPlayer.name.toUpperCase();
     const nameText = this.add.text(slot.x, slot.y + PLAYER_RADIUS + 5, displayName, {
       fontSize: '8px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff',
       shadow: { color: '#000000', fill: true, offsetX: 1, offsetY: 1, blur: 2 },
     }).setOrigin(0.5, 0).setDepth(9);
 
-    // User player: add a white ring to highlight
     if (isUser) {
       this.add.arc(slot.x, slot.y, PLAYER_RADIUS + 4, 0, 360, false, 0xffffff, 0)
         .setStrokeStyle(2, 0xffffff, 0.7)
@@ -421,7 +400,7 @@ export default class MatchScene extends Phaser.Scene {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // POSSESSION TRIANGLES — use Triangle shape (not Graphics)
+  // POSSESSION TRIANGLES
   // ══════════════════════════════════════════════════════════════════════════
 
   private createPossessionTriangles() {
@@ -473,7 +452,6 @@ export default class MatchScene extends Phaser.Scene {
       duration: 220, ease: 'Cubic.easeOut',
     });
 
-    // Squash & stretch on the ball — visual deformation on impact
     this.tweens.killTweensOf(this.ball);
     const angle = (this.userPlayer?.getData('facingAngle') as number) ?? 0;
     this.ball.setRotation(angle);
@@ -484,7 +462,6 @@ export default class MatchScene extends Phaser.Scene {
       duration: 130, ease: 'Back.easeOut',
     });
 
-    // Camera shake on shots — subtle, not nauseating
     if (isShot) {
       this.cameras.main.shake(90, 0.005);
     }
@@ -495,24 +472,11 @@ export default class MatchScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
 
   private setupMinimapAndUI() {
-    // ✅ FIX: Asegurar que la cámara principal tenga scroll factor 1
-    // (relación 1:1 con el mundo)
-    this.cameras.main.setScrollFactor(1, 1);
-
-    // Crear la cámara del minimapa
+    // ✅ FIX: Crear minimap con métodos que SÍ existen en Phaser 3.90
     this.minimapCam = this.cameras.add(MINI_X, MINI_Y, MINI_W, MINI_H);
     this.minimapCam.setZoom(MINI_W / PITCH_W);
     this.minimapCam.setBounds(0, 0, PITCH_W, PITCH_H);
     this.minimapCam.setBackgroundColor(0x0d1a0f);
-
-    // ✅ FIX: Fijar los círculos de jugadores a scroll factor 0
-    // (espacio de pantalla, no espacio de mundo)
-    this.playerVisuals.forEach(({ circle, numText, nameText, shadow }) => {
-      circle.setScrollFactor(0);
-      shadow.setScrollFactor(0);
-      numText.setScrollFactor(0);
-      nameText.setScrollFactor(0);
-    });
 
     const border = this.add.graphics().setDepth(50);
     border.lineStyle(2, 0x2ea043, 1);
@@ -550,11 +514,10 @@ export default class MatchScene extends Phaser.Scene {
     sep.beginPath(); sep.moveTo(PX + 10, PY + 47); sep.lineTo(PX + PW - 10, PY + 47); sep.strokePath();
     this.uiObjects.push(panel, sep, tiro, tiroLbl, esp, paseLbl);
 
-    // ✅ FIX: Ahora minimapCam existe, así que ignore() funcionará sin errores
-    // Only ignore UI objects from minimap — player circles stay visible in both cameras
+    // ✅ Ignore UI objects from minimap
     this.minimapCam.ignore([...this.uiObjects, this.kickIndicator]);
 
-    // ✅ AGREGAR: Si se crearon controles móviles, también los ignoramos
+    // ✅ Ignore mobile controls from minimap
     if (this.isTouchDevice && this.joyBase) {
       this.minimapCam.ignore([this.joyBase, this.joyThumb]);
     }
@@ -609,8 +572,6 @@ export default class MatchScene extends Phaser.Scene {
     passBtn.on('pointerdown', () => { this.mobilePassRequested = true; this.flashButton(passBtn); });
 
     this.game.canvas.style.touchAction = 'none';
-    // ✅ FIX: NO llamar minimapCam.ignore() aquí — minimapCam aún no existe
-    // Esto se hace en setupMinimapAndUI()
     this.uiObjects.push(this.joyBase, this.joyThumb, joyZone, shotBtn, shotLbl, passBtn, passLbl);
   }
 
@@ -661,7 +622,6 @@ export default class MatchScene extends Phaser.Scene {
         ballObj   as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody,
       );
     });
-    // Player-player collisions: shake camera on hard hits
     this.physics.add.collider(this.players, this.players, (a, b) => {
       const pa = a as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
       const pb = b as Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
@@ -786,12 +746,11 @@ export default class MatchScene extends Phaser.Scene {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // SYNC VISUALS — FIX: force setVisible(true) every frame, never skip
+  // SYNC VISUALS — force setVisible(true) every frame
   // ══════════════════════════════════════════════════════════════════════════
 
   private syncVisuals() {
     this.playerVisuals.forEach(({ sprite, circle, numText, nameText, shadow }) => {
-      // FIX: Don't skip inactive sprites — force visibility and update position anyway.
       const x = Number.isFinite(sprite.x) ? sprite.x : (sprite.getData('spawnX') ?? PITCH_W / 2);
       const y = Number.isFinite(sprite.y) ? sprite.y : (sprite.getData('spawnY') ?? PITCH_H / 2);
 
@@ -842,11 +801,10 @@ export default class MatchScene extends Phaser.Scene {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // RESET — FIX: null-check body before accessing, prevents forEach crash
+  // RESET
   // ══════════════════════════════════════════════════════════════════════════
 
   private resetPositions() {
-    // Reset ball
     this.ball.setPosition(PITCH_W / 2, PITCH_H / 2);
     if (this.ball.body) {
       this.ball.body.setVelocity(0, 0);
@@ -862,12 +820,11 @@ export default class MatchScene extends Phaser.Scene {
       const slots  = isHome ? homeSlots : awaySlots;
       const idx    = isHome ? hi++ : ai++;
 
-      if (!slots[idx]) return; // skip if formation has fewer slots than players
+      if (!slots[idx]) return;
 
       p.setPosition(slots[idx].x, slots[idx].y);
-      p.setActive(true).setVisible(false); // physics sprite stays invisible, visuals handle display
+      p.setActive(true).setVisible(false);
 
-      // FIX: guard against null body
       if (p.body) {
         p.body.setVelocity(0, 0);
         p.body.setAcceleration(0, 0);
