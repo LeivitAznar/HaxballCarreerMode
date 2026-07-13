@@ -13,8 +13,9 @@
  *  4. Player physics sprites now use setCollideWorldBounds(true) as a safety
  *     net — prevents players from ever leaving the pitch bounds.
  *  5. sanitizeBody() called every frame to recover any NaN-position sprite.
- *  6. COPILOT FIX: setupMinimapAndUI() moved to run before game object creation
- *     and explicit scroll factor/visibility settings applied to avoid render cull conflicts.
+ *  6. COPILOT FIX: setupMinimapAndUI() moved to the VERY END of create()
+ *     AFTER all game objects are created, and scroll factors are now set
+ *     CORRECTLY to prevent render culling from hiding player circles.
  */
 import Phaser from 'phaser';
 import { Player, Team } from '../../career/types';
@@ -48,7 +49,7 @@ const MINI_H = Math.round(MINI_W * PITCH_H / PITCH_W);
 const MINI_X = (PITCH_W - MINI_W) / 2;
 const MINI_Y = FIELD_BOT - MINI_H - 8;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function darken(color: number, factor: number): number {
   const r = Math.max(0, ((color >> 16) & 0xff) * (1 - factor));
   const g = Math.max(0, ((color >>  8) & 0xff) * (1 - factor));
@@ -136,9 +137,6 @@ export default class MatchScene extends Phaser.Scene {
     this.game.registry.set('scoreState', this.score);
     this.game.registry.set('userStats',  this.userStats);
 
-    // FIX (Copilot): Setup cameras BEFORE creating visual game objects
-    this.setupMinimapAndUI();
-
     this.drawPitch();
     this.createWalls();
     this.createGoalposts();
@@ -155,6 +153,9 @@ export default class MatchScene extends Phaser.Scene {
     this.input.addPointer(2);
     this.isTouchDevice = this.sys.game.device.input.touch;
     if (this.isTouchDevice) this.setupMobileControls();
+
+    // ✅ FIX COPILOT: Configurar cámaras AL FINAL, después de que TODOS los objetos existan
+    this.setupMinimapAndUI();
   }
 
   update() {
@@ -491,17 +492,24 @@ export default class MatchScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
 
   private setupMinimapAndUI() {
+    // ✅ FIX COPILOT: Asegurar que la cámara principal tenga scroll factor 1
+    // (relación 1:1 con el mundo)
+    this.cameras.main.setScrollFactor(1, 1);
+
+    // Crear la cámara del minimapa
     this.minimapCam = this.cameras.add(MINI_X, MINI_Y, MINI_W, MINI_H);
     this.minimapCam.setZoom(MINI_W / PITCH_W);
     this.minimapCam.setBounds(0, 0, PITCH_W, PITCH_H);
     this.minimapCam.setBackgroundColor(0x0d1a0f);
 
-    // FIX: Add setScrollFactor(1) to all player visual objects
-    (this.playerVisuals || []).forEach(({ circle, numText, nameText, shadow }) => {
-      circle.setScrollFactor(1);
-      shadow.setScrollFactor(1);
-      numText.setScrollFactor(1);
-      nameText.setScrollFactor(1);
+    // ✅ FIX COPILOT: Fijar los círculos de jugadores a scroll factor 0
+    // (espacio de pantalla, no espacio de mundo)
+    // Esto evita que Phaser los cullee cuando el minimapa cambia la configuración de cámaras
+    this.playerVisuals.forEach(({ circle, numText, nameText, shadow }) => {
+      circle.setScrollFactor(0);
+      shadow.setScrollFactor(0);
+      numText.setScrollFactor(0);
+      nameText.setScrollFactor(0);
     });
 
     const border = this.add.graphics().setDepth(50);
