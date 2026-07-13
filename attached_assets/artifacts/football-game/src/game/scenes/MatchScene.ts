@@ -5,17 +5,14 @@
  *  1. Player visuals now use Arc + Text objects instead of Graphics, which are
  *     simpler, can't "lose" their drawn content, and are easier to position.
  *  2. syncVisuals() forces setVisible(true) every frame — eliminates the
- *     "appears for a millisecond then disappears" bug caused by the previous
- *     `if (!sprite.active) return` guard hiding circles permanently.
- *  3. resetPositions() now guards against null body before calling velocity
- *     methods — the old crash was silently aborting the forEach mid-loop,
- *     leaving most players un-reset and off-screen.
- *  4. Player physics sprites now use setCollideWorldBounds(true) as a safety
- *     net — prevents players from ever leaving the pitch bounds.
- *  5. sanitizeBody() called every frame to recover any NaN-position sprite.
- *  6. COPILOT FIX: setupMinimapAndUI() moved to the VERY END of create()
- *     AFTER all game objects are created, and scroll factors are now set
- *     CORRECTLY to prevent render culling from hiding player circles.
+ *     "appears for a millisecond then disappears" bug.
+ *  3. resetPositions() now guards against null body before calling velocity methods.
+ *  4. sanitizeBody() called every frame to recover any NaN-position sprite.
+ *  5. setupMinimapAndUI() moved to the END of create() and scroll factors fixed.
+ *  6. FIXED: setupMobileControls() now happens BEFORE setupMinimapAndUI(), so
+ *     minimapCam.ignore() doesn't fail with "undefined is not an object".
+ *  7. Mobile controls now properly excluded from minimap.
+ *  8. Added setCollideWorldBounds(true) as safety net for all players + ball.
  */
 import Phaser from 'phaser';
 import { Player, Team } from '../../career/types';
@@ -154,7 +151,8 @@ export default class MatchScene extends Phaser.Scene {
     this.isTouchDevice = this.sys.game.device.input.touch;
     if (this.isTouchDevice) this.setupMobileControls();
 
-    // ✅ FIX COPILOT: Configurar cámaras AL FINAL, después de que TODOS los objetos existan
+    // ✅ FIX: Setup minimap + UI AFTER everything, including mobile controls
+    // This ensures minimapCam exists before any code tries to call .ignore() on it
     this.setupMinimapAndUI();
   }
 
@@ -308,6 +306,8 @@ export default class MatchScene extends Phaser.Scene {
       Phaser.Types.Physics.Arcade.SpriteWithDynamicBody;
     configureBall(this.ball);
     this.ball.setDepth(10);
+    // FIX: Agregar bounds para que no salga del pitch
+    this.ball.setCollideWorldBounds(true);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -367,6 +367,9 @@ export default class MatchScene extends Phaser.Scene {
     sprite.setData('pos',        slot.pos);
     sprite.setData('isUser',     isUser);
     sprite.setData('team',       team);
+
+    // FIX: Agregar bounds para que no salgan del pitch
+    sprite.setCollideWorldBounds(true);
 
     // ── FIX: Use Arc shape instead of Graphics ─────────────────────────────
     // Arc objects keep their appearance without needing to be redrawn each
@@ -492,7 +495,7 @@ export default class MatchScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════════════════════
 
   private setupMinimapAndUI() {
-    // ✅ FIX COPILOT: Asegurar que la cámara principal tenga scroll factor 1
+    // ✅ FIX: Asegurar que la cámara principal tenga scroll factor 1
     // (relación 1:1 con el mundo)
     this.cameras.main.setScrollFactor(1, 1);
 
@@ -502,9 +505,8 @@ export default class MatchScene extends Phaser.Scene {
     this.minimapCam.setBounds(0, 0, PITCH_W, PITCH_H);
     this.minimapCam.setBackgroundColor(0x0d1a0f);
 
-    // ✅ FIX COPILOT: Fijar los círculos de jugadores a scroll factor 0
+    // ✅ FIX: Fijar los círculos de jugadores a scroll factor 0
     // (espacio de pantalla, no espacio de mundo)
-    // Esto evita que Phaser los cullee cuando el minimapa cambia la configuración de cámaras
     this.playerVisuals.forEach(({ circle, numText, nameText, shadow }) => {
       circle.setScrollFactor(0);
       shadow.setScrollFactor(0);
@@ -548,8 +550,14 @@ export default class MatchScene extends Phaser.Scene {
     sep.beginPath(); sep.moveTo(PX + 10, PY + 47); sep.lineTo(PX + PW - 10, PY + 47); sep.strokePath();
     this.uiObjects.push(panel, sep, tiro, tiroLbl, esp, paseLbl);
 
+    // ✅ FIX: Ahora minimapCam existe, así que ignore() funcionará sin errores
     // Only ignore UI objects from minimap — player circles stay visible in both cameras
     this.minimapCam.ignore([...this.uiObjects, this.kickIndicator]);
+
+    // ✅ AGREGAR: Si se crearon controles móviles, también los ignoramos
+    if (this.isTouchDevice && this.joyBase) {
+      this.minimapCam.ignore([this.joyBase, this.joyThumb]);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -601,8 +609,9 @@ export default class MatchScene extends Phaser.Scene {
     passBtn.on('pointerdown', () => { this.mobilePassRequested = true; this.flashButton(passBtn); });
 
     this.game.canvas.style.touchAction = 'none';
-    this.minimapCam.ignore([this.joyBase, this.joyThumb, joyZone, shotBtn, shotLbl, passBtn, passLbl]);
-    this.uiObjects.push(this.joyBase, this.joyThumb, shotBtn, shotLbl, passBtn, passLbl);
+    // ✅ FIX: NO llamar minimapCam.ignore() aquí — minimapCam aún no existe
+    // Esto se hace en setupMinimapAndUI()
+    this.uiObjects.push(this.joyBase, this.joyThumb, joyZone, shotBtn, shotLbl, passBtn, passLbl);
   }
 
   private updateJoystickFromPointer(pointer: Phaser.Input.Pointer) {
@@ -783,8 +792,6 @@ export default class MatchScene extends Phaser.Scene {
   private syncVisuals() {
     this.playerVisuals.forEach(({ sprite, circle, numText, nameText, shadow }) => {
       // FIX: Don't skip inactive sprites — force visibility and update position anyway.
-      // The old `if (!sprite.active) return` was permanently hiding circles when
-      // the scene paused/resumed or physics bodies were temporarily disabled.
       const x = Number.isFinite(sprite.x) ? sprite.x : (sprite.getData('spawnX') ?? PITCH_W / 2);
       const y = Number.isFinite(sprite.y) ? sprite.y : (sprite.getData('spawnY') ?? PITCH_H / 2);
 
@@ -860,12 +867,11 @@ export default class MatchScene extends Phaser.Scene {
       p.setPosition(slots[idx].x, slots[idx].y);
       p.setActive(true).setVisible(false); // physics sprite stays invisible, visuals handle display
 
-      // FIX: guard against null body — was crashing here and aborting the loop,
-      // leaving remaining players un-reset and off-screen or in wrong positions.
+      // FIX: guard against null body
       if (p.body) {
         p.body.setVelocity(0, 0);
         p.body.setAcceleration(0, 0);
-        p.body.enable = true; // re-enable in case it was disabled during goal sequence
+        p.body.enable = true;
       }
     });
   }
