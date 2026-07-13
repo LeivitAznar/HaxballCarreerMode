@@ -13,6 +13,8 @@
  *  4. Player physics sprites now use setCollideWorldBounds(true) as a safety
  *     net — prevents players from ever leaving the pitch bounds.
  *  5. sanitizeBody() called every frame to recover any NaN-position sprite.
+ *  6. COPILOT FIX: setupMinimapAndUI() moved to run before game object creation
+ *     and explicit scroll factor/visibility settings applied to avoid render cull conflicts.
  */
 import Phaser from 'phaser';
 import { Player, Team } from '../../career/types';
@@ -134,6 +136,9 @@ export default class MatchScene extends Phaser.Scene {
     this.game.registry.set('scoreState', this.score);
     this.game.registry.set('userStats',  this.userStats);
 
+    // FIX (Copilot): Setup cameras BEFORE creating visual game objects
+    this.setupMinimapAndUI();
+
     this.drawPitch();
     this.createWalls();
     this.createGoalposts();
@@ -145,7 +150,6 @@ export default class MatchScene extends Phaser.Scene {
     this.setupInputs();
     this.setupColliders();
     this.setupTimer();
-    this.setupMinimapAndUI();
 
     // Multi-touch support: joystick + button simultaneously
     this.input.addPointer(2);
@@ -369,14 +373,18 @@ export default class MatchScene extends Phaser.Scene {
     const fillColor   = team.primaryColor;
     const strokeColor = darken(fillColor, 0.35);
 
-    // Shadow (slightly offset, low depth)
+    // Shadow (slightly offset, low depth) - FIX: explicitly set both active and visible
     const shadow = this.add.arc(slot.x + 2, slot.y + 4, PLAYER_RADIUS * 0.9, 0, 360, false, 0x000000, 0.3)
-      .setDepth(7);
+      .setDepth(7)
+      .setActive(true)
+      .setVisible(true);
 
-    // Main circle
+    // Main circle - FIX: explicitly set both active and visible
     const circle = this.add.arc(slot.x, slot.y, PLAYER_RADIUS, 0, 360, false, fillColor, 1)
       .setStrokeStyle(2.5, strokeColor, 1)
-      .setDepth(8);
+      .setDepth(8)
+      .setActive(true)
+      .setVisible(true);
 
     // Shirt number
     const numText = this.add.text(slot.x, slot.y, `${rPlayer.shirtNumber}`, {
@@ -487,6 +495,14 @@ export default class MatchScene extends Phaser.Scene {
     this.minimapCam.setZoom(MINI_W / PITCH_W);
     this.minimapCam.setBounds(0, 0, PITCH_W, PITCH_H);
     this.minimapCam.setBackgroundColor(0x0d1a0f);
+
+    // FIX: Add setScrollFactor(1) to all player visual objects
+    (this.playerVisuals || []).forEach(({ circle, numText, nameText, shadow }) => {
+      circle.setScrollFactor(1);
+      shadow.setScrollFactor(1);
+      numText.setScrollFactor(1);
+      nameText.setScrollFactor(1);
+    });
 
     const border = this.add.graphics().setDepth(50);
     border.lineStyle(2, 0x2ea043, 1);
